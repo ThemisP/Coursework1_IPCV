@@ -1,8 +1,10 @@
 ﻿  main.cpp
-d:\onedrive - university of bristol\3rd_year\image processing and computer vision\cw1\coursework1_ipcv\coursework1_ipcv\main.cpp(110): warning C4244: '=': conversion from 'int' to 'float', possible loss of data
-d:\onedrive - university of bristol\3rd_year\image processing and computer vision\cw1\coursework1_ipcv\coursework1_ipcv\main.cpp(128): warning C4244: 'initializing': conversion from 'float' to 'int', possible loss of data
-d:\onedrive - university of bristol\3rd_year\image processing and computer vision\cw1\coursework1_ipcv\coursework1_ipcv\main.cpp(129): warning C4244: 'initializing': conversion from 'float' to 'int', possible loss of data
-d:\onedrive - university of bristol\3rd_year\image processing and computer vision\cw1\coursework1_ipcv\coursework1_ipcv\main.cpp(132): warning C4244: '=': conversion from 'float' to 'int', possible loss of data
-d:\onedrive - university of bristol\3rd_year\image processing and computer vision\cw1\coursework1_ipcv\coursework1_ipcv\main.cpp(133): warning C4244: '=': conversion from 'float' to 'int', possible loss of data
-d:\onedrive - university of bristol\3rd_year\image processing and computer vision\cw1\coursework1_ipcv\coursework1_ipcv\main.cpp(317): warning C4244: '=': conversion from 'double' to 'uchar', possible loss of data
+d:\onedrive - university of bristol\3rd_year\image processing and computer vision\cw1\coursework1_ipcv\coursework1_ipcv\main.cpp(129): warning C4244: '=': conversion from 'int' to 'float', possible loss of data
+d:\onedrive - university of bristol\3rd_year\image processing and computer vision\cw1\coursework1_ipcv\coursework1_ipcv\main.cpp(151): warning C4244: '=': conversion from 'int' to 'float', possible loss of data
+d:\onedrive - university of bristol\3rd_year\image processing and computer vision\cw1\coursework1_ipcv\coursework1_ipcv\main.cpp(170): warning C4244: 'initializing': conversion from 'float' to 'int', possible loss of data
+d:\onedrive - university of bristol\3rd_year\image processing and computer vision\cw1\coursework1_ipcv\coursework1_ipcv\main.cpp(171): warning C4244: 'initializing': conversion from 'float' to 'int', possible loss of data
+d:\onedrive - university of bristol\3rd_year\image processing and computer vision\cw1\coursework1_ipcv\coursework1_ipcv\main.cpp(174): warning C4244: '=': conversion from 'float' to 'int', possible loss of data
+d:\onedrive - university of bristol\3rd_year\image processing and computer vision\cw1\coursework1_ipcv\coursework1_ipcv\main.cpp(175): warning C4244: '=': conversion from 'float' to 'int', possible loss of data
+d:\onedrive - university of bristol\3rd_year\image processing and computer vision\cw1\coursework1_ipcv\coursework1_ipcv\main.cpp(191): warning C4244: 'initializing': conversion from 'double' to 'int', possible loss of data
+d:\onedrive - university of bristol\3rd_year\image processing and computer vision\cw1\coursework1_ipcv\coursework1_ipcv\main.cpp(375): warning C4244: '=': conversion from 'double' to 'uchar', possible loss of data
   Coursework1_IPCV.vcxproj -> D:\OneDrive - University of Bristol\3rd_year\Image Processing and Computer Vision\cw1\Coursework1_IPCV\x64\Debug\Coursework1_IPCV.exe

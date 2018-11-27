@@ -16,19 +16,23 @@
 #include <iostream>
 #include <stdio.h>
 
+#define M_PI 3.1415926535897
+
 using namespace std;
 using namespace cv;
 
 /** Function Headers */
 void detectAndDisplay(Mat frame);
-void sobel(Mat &input, Mat &magnitudeThreshold, Mat &directionOut);
+void sobel(Mat &input, Mat &magnitudeThreshold, Mat &directionOut, int rank);
 void convolute(Mat &input, Mat &output, Mat &kernel);
 void GaussianBlur2(cv::Mat &input, int size, cv::Mat &blurredOutput);
 void magnitudeImages(Mat &x, Mat &y, Mat &output);
 void directionAtan(Mat &x, Mat &y, Mat &output);
 void normaliseImage(Mat &image, Mat &output);
-void houghTransform(Mat &magnitudeThresh, Mat &direction,int *houghCircles);
-void plotHoughSpace(int *houghCircles, int rows, int columns);
+void houghCircleDetect(Mat &magnitudeThresh, Mat &direction,int *houghCircles);
+void houghLineDetect(Mat &magnitudeThresh, Mat &direction,int *houghLines);
+void plotHoughSpaceCircles(int *houghCircles, int rows, int columns, int rank);
+void plotHoughSpaceLines(int *houghLines, int rows, int columns, int rank);
 
 /** Global variables */
 String cascade_name = "cascade.xml";
@@ -39,13 +43,7 @@ int main(int argc, const char** argv)
 {
 	// 1. Read Input Image
 	Mat frame = imread("dart15.jpg", CV_LOAD_IMAGE_COLOR);
-	Mat magnitudeThreshold, direction;
 	
-	sobel(frame, magnitudeThreshold, direction);
-	int *houghCircles = NULL;
-	houghCircles = new int[magnitudeThreshold.rows * magnitudeThreshold.cols * (90)]();
-	houghTransform(magnitudeThreshold, direction, houghCircles);
-	plotHoughSpace(houghCircles, magnitudeThreshold.rows, magnitudeThreshold.cols);
 	
 
 	// 2. Load the Strong Classifier in a structure called `Cascade'
@@ -89,14 +87,35 @@ void detectAndDisplay(Mat frame)
 	for (int i = 0; i < faces.size(); i++)
 	{
 		rectangle(frame, Point(faces[i].x, faces[i].y), Point(faces[i].x + faces[i].width, faces[i].y + faces[i].height), Scalar(0, 255, 0), 2);
+		
+		std::cout << "Rect " << i << "has size: " << faces[i].width << "x" << faces[i].height  << std::endl;
+
+		Mat magnitudeThreshold, direction;
+
+		Rect roi(faces[i].x, faces[i].y, faces[i].width, faces[i].height);
+		Mat cropped(frame, roi);
+
+		sobel(cropped, magnitudeThreshold, direction, i);
+		int *houghCircles = NULL;
+		int lengthCircles = magnitudeThreshold.rows * magnitudeThreshold.cols * (90);
+		
+		houghCircles = new int[lengthCircles]();
+		houghCircleDetect(magnitudeThreshold, direction, houghCircles);
+		plotHoughSpaceCircles(houghCircles, magnitudeThreshold.rows, magnitudeThreshold.cols, i);
+
+		int *houghLines = NULL;
+		int lengthLines = magnitudeThreshold.rows * magnitudeThreshold.cols * (360);
+		houghLines = new int[lengthLines]();
+		houghLineDetect(magnitudeThreshold, direction, houghLines);
+		plotHoughSpaceLines(houghLines, magnitudeThreshold.rows, magnitudeThreshold.cols, i);
 	}
 
 }
 
-void plotHoughSpace(int *houghCircles, int rows, int columns) {
+void plotHoughSpaceCircles(int *houghCircles, int rows, int columns, int rank) {
 	if (houghCircles == NULL) return;
 	Mat image;
-	image.create(Size(rows, columns), CV_32F);
+	image.create(Size(columns, rows), CV_32F);
 	int radius = 90;
 	for (int i = 0; i < rows; i++)
 	{
@@ -111,15 +130,38 @@ void plotHoughSpace(int *houghCircles, int rows, int columns) {
 		}
 	}
 	normaliseImage(image, image);
-	namedWindow("Hough Space", CV_WINDOW_AUTOSIZE);
+	namedWindow("Hough Space Circles" + std::to_string(rank), CV_WINDOW_AUTOSIZE);
 
-	imshow("Hough Space", image);
+	imshow("Hough Space Circles"+std::to_string(rank), image);
 }
 
-void houghTransform(Mat &magnitudeThresh, Mat &direction, int *houghCircles) {
+void plotHoughSpaceLines(int *houghLines, int rows, int columns, int rank) {
+	if (houghLines == NULL) return;
+	Mat image;
+	image.create(Size(360, 2*max(rows,columns)), CV_32F);
+	for (int i = 0; i < rows; i++)
+	{
+		for (int j = 0; j < columns; j++)
+		{
+			int sum = 0;
+			for (int r = 0; r < 360; r++)
+			{
+				sum += houghLines[i + rows * (j + columns * r)];
+			}
+			image.at<float>(i, j) = sum;
+		}
+	}
+	normaliseImage(image, image);
+	namedWindow("Hough Space Lines" + std::to_string(rank), CV_WINDOW_AUTOSIZE);
+
+	imshow("Hough Space Lines" + std::to_string(rank), image);
+}
+
+void houghCircleDetect(Mat &magnitudeThresh, Mat &direction, int *houghCircles) {
 	int rows = magnitudeThresh.rows;
 	int cols = magnitudeThresh.cols;
 	int radiuslow = 10, radiushigh = 100;
+	int length = rows * cols*(90);
 	
 	for (int x = 0; x<rows; x++)
 		for (int y = 0; y<cols; y++)
@@ -136,7 +178,23 @@ void houghTransform(Mat &magnitudeThresh, Mat &direction, int *houghCircles) {
 				}
 }
 
-void sobel(Mat &input, Mat &magnitudeThreshold, Mat &directionOut) {
+void houghLineDetect(Mat &magnitudeThresh, Mat &direction, int *houghLines) {
+	int rows = magnitudeThresh.rows;
+	int cols = magnitudeThresh.cols;
+	int maxDim = max(rows, cols);
+	int length = 2*maxDim * (360);
+
+	for (int x = 0; x<rows; x++)
+		for (int y = 0; y<cols; y++)
+			if ((int)magnitudeThresh.at<uchar>(x, y) != 0)
+				for (int theta = -10; theta < 10; theta++) {
+					int ro = round(x * cos((theta*(M_PI/180))+direction.at<float>(x,y))+ y * sin((theta*(M_PI/180)))+direction.at<float>(x, y));
+					if (ro >= 0 && ro < rows*cols)
+						houghLines[ro + maxDim * (theta)] += 1;
+				}
+}
+
+void sobel(Mat &input, Mat &magnitudeThreshold, Mat &directionOut, int rank) {
 	Mat inputGray;
 	cvtColor(input, inputGray, CV_BGR2GRAY);
 	//Gaussian Blur Image
@@ -164,8 +222,8 @@ void sobel(Mat &input, Mat &magnitudeThreshold, Mat &directionOut) {
 	magnitudeImages(derX, derY, magnitude);
 	normaliseImage(magnitude, magnitude);
 	threshold(magnitude, magnitude, 70, 255, CV_THRESH_BINARY);
-	namedWindow("Magnitude", CV_WINDOW_AUTOSIZE);
-	imshow("Magnitude", magnitude);
+	//namedWindow("Magnitude"+ std::to_string(rank), CV_WINDOW_AUTOSIZE);
+	//imshow("Magnitude"+std::to_string(rank), magnitude);
 	magnitudeThreshold.create(magnitude.size(), magnitude.type());
 	magnitudeThreshold = magnitude.clone();
 
@@ -176,8 +234,8 @@ void sobel(Mat &input, Mat &magnitudeThreshold, Mat &directionOut) {
 	directionOut.create(direction.size(), direction.type());
 	directionOut = direction.clone();
 	normaliseImage(direction, dirShow);
-	namedWindow("Direction", CV_WINDOW_AUTOSIZE);
-	imshow("Direction", dirShow);
+	//namedWindow("Direction"+std::to_string(rank), CV_WINDOW_AUTOSIZE);
+	//imshow("Direction"+std::to_string(rank), dirShow);
 
 }
 
