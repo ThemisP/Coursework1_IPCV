@@ -138,17 +138,15 @@ void plotHoughSpaceCircles(int *houghCircles, int rows, int columns, int rank) {
 void plotHoughSpaceLines(int *houghLines, int rows, int columns, int rank) {
 	if (houghLines == NULL) return;
 	Mat image;
-	image.create(Size(360, 2*max(rows,columns)), CV_32F);
-	for (int i = 0; i < rows; i++)
+	int maxDim = max(rows, columns);
+	image.create(Size(360, 2*maxDim), CV_32F);
+	
+	for (int i = 0; i < 2*maxDim; i++)
 	{
-		for (int j = 0; j < columns; j++)
+		for (int theta = 0; theta < 360; theta++)
 		{
-			int sum = 0;
-			for (int r = 0; r < 360; r++)
-			{
-				sum += houghLines[i + rows * (j + columns * r)];
-			}
-			image.at<float>(i, j) = sum;
+			
+			image.at<float>(i, theta) = houghLines[i+2*maxDim*(theta)];
 		}
 	}
 	normaliseImage(image, image);
@@ -187,10 +185,11 @@ void houghLineDetect(Mat &magnitudeThresh, Mat &direction, int *houghLines) {
 	for (int x = 0; x<rows; x++)
 		for (int y = 0; y<cols; y++)
 			if ((int)magnitudeThresh.at<uchar>(x, y) != 0)
-				for (int theta = -10; theta < 10; theta++) {
-					int ro = round(x * cos((theta*(M_PI/180))+direction.at<float>(x,y))+ y * sin((theta*(M_PI/180)))+direction.at<float>(x, y));
-					if (ro >= 0 && ro < rows*cols)
-						houghLines[ro + maxDim * (theta)] += 1;
+				for (int theta = 0; theta < 360; theta++) {
+					float pos = direction.at<float>(x, y);
+					int ro = round(x * cos(theta*(M_PI/180))+ y * sin(theta*(M_PI/180)));
+					if (ro >= 0 && ro < 2*maxDim)
+						houghLines[ro + (2*maxDim*theta)] += 1;
 				}
 }
 
