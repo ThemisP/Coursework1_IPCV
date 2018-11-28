@@ -29,35 +29,84 @@ void GaussianBlur2(cv::Mat &input, int size, cv::Mat &blurredOutput);
 void magnitudeImages(Mat &x, Mat &y, Mat &output);
 void directionAtan(Mat &x, Mat &y, Mat &output);
 void normaliseImage(Mat &image, Mat &output);
-void houghCircleDetect(Mat &magnitudeThresh, Mat &direction,int *houghCircles);
-void houghLineDetect(Mat &magnitudeThresh, Mat &direction,int *houghLines);
-void plotHoughSpaceCircles(int *houghCircles, int rows, int columns, int rank);
-void plotHoughSpaceLines(int *houghLines, int rows, int columns, int rank);
+void houghCircleDetect(Mat &magnitudeThresh, Mat &direction,int ***houghCircles);
+void houghLineDetect(Mat &magnitudeThresh, Mat &direction,int **houghLines);
+void plotHoughSpaceCircles(int ***houghCircles, int rows, int columns, int rank);
+int plotHoughSpaceLines(Mat &frame, int **houghLines,int diagonal,int threshold, int rank, Point startPos);
 
 /** Global variables */
 String cascade_name = "cascade.xml";
 CascadeClassifier cascade;
+
+int **malloc2dArray(int dim1, int dim2)
+{
+	int i, j;
+
+	int **array = (int **)malloc(dim1 * sizeof(int *));
+
+	for (i = 0; i < dim1; i++) {
+
+		array[i] = (int *)malloc(dim2 * sizeof(int ));
+		for (int j = 0; j < dim2; j++) {
+			array[i][j] = 0;
+		}
+
+	}
+	return array;
+
+}
+
+int ***malloc3dArray(int dim1, int dim2, int dim3)
+{
+	int i, j, k;
+
+	int ***array = (int ***)malloc(dim1 * sizeof(int **));
+
+	for (i = 0; i < dim1; i++) {
+
+		array[i] = (int **)malloc(dim2 * sizeof(int *));
+
+		for (j = 0; j < dim2; j++) {
+
+			array[i][j] = (int *)malloc(dim3 * sizeof(int));
+			for (k = 0; k < dim3; k++)
+				array[i][j][k] = 0;
+		}
+
+	}
+	return array;
+
+}
+
 
 /** @function main */
 int main(int argc, const char** argv)
 {
 	// 1. Read Input Image
 	Mat frame = imread("dart15.jpg", CV_LOAD_IMAGE_COLOR);
+	Mat image = imread("lines.png", CV_LOAD_IMAGE_COLOR);
+	Mat magnitudeThreshold, direction;
+	sobel(image, magnitudeThreshold, direction, 1);
 	
-	
+	int **houghLines = NULL;
+	int diagonal = ceil(sqrt(pow(magnitudeThreshold.rows, 2) + pow(magnitudeThreshold.cols, 2)));
+	houghLines = malloc2dArray(diagonal, 360);
+	houghLineDetect(magnitudeThreshold, direction, houghLines);
+	int count = plotHoughSpaceLines(image, houghLines, diagonal, 100, 1, Point(0, 0));
+	std::cout << "Number of lines detected in image " << 1 << " is: " << count << std::endl;
 
 	// 2. Load the Strong Classifier in a structure called `Cascade'
 	if (!cascade.load(cascade_name)) { printf("--(!)Error loading\n"); return -1; };
 
 	// 3. Detect Faces and Display Result
-	detectAndDisplay(frame);
+	//detectAndDisplay(frame);
 
 	// 4. Save Result Image
-	imwrite("detected.jpg", frame);
+	imwrite("detected.jpg", image);
 
 	namedWindow("Display window", CV_WINDOW_AUTOSIZE);
 
-	imshow("Display window", frame);
+	imshow("Display window", image);
 	waitKey(0);
 	
 	frame.release();
@@ -86,33 +135,39 @@ void detectAndDisplay(Mat frame)
 	// 4. Draw box around faces found
 	for (int i = 0; i < faces.size(); i++)
 	{
-		rectangle(frame, Point(faces[i].x, faces[i].y), Point(faces[i].x + faces[i].width, faces[i].y + faces[i].height), Scalar(0, 255, 0), 2);
+		int x = faces[i].x, y = faces[i].y, width = faces[i].width, height = faces[i].height;
+		rectangle(frame, Point(x, y), Point(x + width, y + height), Scalar(0, 255, 0), 2);
 		
 		std::cout << "Rect " << i << "has size: " << faces[i].width << "x" << faces[i].height  << std::endl;
 
 		Mat magnitudeThreshold, direction;
+		int xCheck = x - 0.25*width, yCheck = y - 0.25*height, endXCheck = x+1.25*width, endYCheck = y + 1.25*height;
+		if (xCheck < 0) xCheck = 0;
+		if (endXCheck > frame.rows) endXCheck = frame.rows;
+		if (yCheck < 0) yCheck = 0;
+		if (endYCheck > frame.cols) endYCheck = frame.cols;
 
-		Rect roi(faces[i].x, faces[i].y, faces[i].width, faces[i].height);
+		std::cout << "Rect CHECK " << i << "has size: " << endXCheck -xCheck << "x" << endYCheck-yCheck << std::endl;
+		Rect roi(xCheck, yCheck, endXCheck, endYCheck);
 		Mat cropped(frame, roi);
 
 		sobel(cropped, magnitudeThreshold, direction, i);
-		int *houghCircles = NULL;
-		int lengthCircles = magnitudeThreshold.rows * magnitudeThreshold.cols * (90);
-		
-		houghCircles = new int[lengthCircles]();
+		/*int ***houghCircles = NULL;
+		houghCircles = malloc3dArray(magnitudeThreshold.rows, magnitudeThreshold.cols, 90);
 		houghCircleDetect(magnitudeThreshold, direction, houghCircles);
-		plotHoughSpaceCircles(houghCircles, magnitudeThreshold.rows, magnitudeThreshold.cols, i);
+		plotHoughSpaceCircles(houghCircles, magnitudeThreshold.rows, magnitudeThreshold.cols, i);*/
 
-		int *houghLines = NULL;
-		int lengthLines = magnitudeThreshold.rows * magnitudeThreshold.cols * (360);
-		houghLines = new int[lengthLines]();
+		int **houghLines = NULL;
+		int diagonal = ceil(sqrt(pow(magnitudeThreshold.rows,2) * pow(magnitudeThreshold.cols,2)));
+		houghLines = malloc2dArray(diagonal,360);
 		houghLineDetect(magnitudeThreshold, direction, houghLines);
-		plotHoughSpaceLines(houghLines, magnitudeThreshold.rows, magnitudeThreshold.cols, i);
+		int count = plotHoughSpaceLines(frame, houghLines, diagonal, 0, i, Point(xCheck, yCheck));
+		std::cout << "Number of lines detected in image " << i << " is: " << count << std::endl;
 	}
 
 }
 
-void plotHoughSpaceCircles(int *houghCircles, int rows, int columns, int rank) {
+void plotHoughSpaceCircles(int ***houghCircles, int rows, int columns, int rank) {
 	if (houghCircles == NULL) return;
 	Mat image;
 	image.create(Size(columns, rows), CV_32F);
@@ -121,10 +176,10 @@ void plotHoughSpaceCircles(int *houghCircles, int rows, int columns, int rank) {
 	{
 		for (int j = 0; j < columns; j++)
 		{
-			int sum = 0;
+			float sum = 0;
 			for (int r = 0; r < radius; r++)
 			{
-				sum += houghCircles[i + rows * (j + columns * r)];
+				sum += houghCircles[i][j][r];
 			}
 			image.at<float>(i, j) = sum;
 		}
@@ -135,62 +190,88 @@ void plotHoughSpaceCircles(int *houghCircles, int rows, int columns, int rank) {
 	imshow("Hough Space Circles"+std::to_string(rank), image);
 }
 
-void plotHoughSpaceLines(int *houghLines, int rows, int columns, int rank) {
-	if (houghLines == NULL) return;
+int plotHoughSpaceLines(Mat &frame, int **houghLines, int diagonal, int threshold,  int rank, Point startPos) {
+	if (houghLines == NULL) return -1;
 	Mat image;
-	int maxDim = max(rows, columns);
-	image.create(Size(360, 2*maxDim), CV_32F);
-	
-	for (int i = 0; i < 2*maxDim; i++)
+	image.create(Size(diagonal, 360), CV_32F);
+	int count = 0;
+	for (int i = 0; i < diagonal; i++)
 	{
 		for (int theta = 0; theta < 360; theta++)
 		{
-			
-			image.at<float>(i, theta) = houghLines[i+2*maxDim*(theta)];
+			float point = (float) houghLines[i][theta];
+			int xStart, yStart, xEnd, yEnd;
+			if (point > threshold) {
+				image.at<float>(i, theta) = point;
+				if (theta%180 == 0) {
+					yStart = 0;
+					xStart = point;
+					yEnd = diagonal;
+					xEnd = point;
+				}
+				else if (theta % 90 == 0) {
+					yStart = point;
+					xStart = 0;
+					yEnd = point;
+					xEnd = diagonal;
+				}
+				else {
+					xStart = round(point / cos(theta * M_PI/180));
+					yStart = 0;
+					xEnd = 0; 
+					yEnd = round(point / sin(theta * M_PI/180));;
+				}
+				cout << "start: " << xStart << "," << yStart << "  end: " << xEnd << "," << yEnd << endl;
+				line(frame, Point(xStart+startPos.x, yStart+startPos.y), Point(xEnd + startPos.x, yEnd + startPos.y), Scalar(0,0,255), 1, 4, 0);
+				count++;
+			}
 		}
 	}
 	normaliseImage(image, image);
 	namedWindow("Hough Space Lines" + std::to_string(rank), CV_WINDOW_AUTOSIZE);
 
 	imshow("Hough Space Lines" + std::to_string(rank), image);
+	return count;
 }
 
-void houghCircleDetect(Mat &magnitudeThresh, Mat &direction, int *houghCircles) {
+void houghCircleDetect(Mat &magnitudeThresh, Mat &direction, int ***houghCircles) {
 	int rows = magnitudeThresh.rows;
 	int cols = magnitudeThresh.cols;
 	int radiuslow = 10, radiushigh = 100;
-	int length = rows * cols*(90);
 	
-	for (int x = 0; x<rows; x++)
-		for (int y = 0; y<cols; y++)
+	for (int x = 0; x < rows; x++)
+		for (int y = 0; y < cols; y++) {
 			if ((int)magnitudeThresh.at<uchar>(x, y) != 0)
 				for (int r = radiuslow; r < radiushigh; r++) {
+
 					int x0 = round(x + r * sin(direction.at<float>(x, y)));
 					int y0 = round(y + r * cos(direction.at<float>(x, y)));
-					if (x0 >= 0 && y0>=0 && x0<magnitudeThresh.rows && y0 <magnitudeThresh.cols)
-						houghCircles[x0 + rows * (y0 + cols * (r - radiuslow))] += 1;
+					if (x0 >= 0 && y0 >= 0 && x0 < rows && y0 < cols)
+						houghCircles[x0][y0][r - radiuslow] += 1;
+
 					x0 = round(x - r * sin(direction.at<float>(x, y)));
 					y0 = round(y - r * cos(direction.at<float>(x, y)));
-					if (x0 >= 0 && y0>=0 && x0<magnitudeThresh.rows && y0 <magnitudeThresh.cols)
-						houghCircles[x0 + rows * (y0 + cols * (r - radiuslow))] += 1;
+					if (x0 >= 0 && y0 >= 0 && x0 < rows && y0 < cols)
+						houghCircles[x0][y0][r - radiuslow] += 1;
 				}
+		}
 }
 
-void houghLineDetect(Mat &magnitudeThresh, Mat &direction, int *houghLines) {
+void houghLineDetect(Mat &magnitudeThresh, Mat &direction, int **houghLines) {
 	int rows = magnitudeThresh.rows;
 	int cols = magnitudeThresh.cols;
-	int maxDim = max(rows, cols);
-	int length = 2*maxDim * (360);
+	int diagonal = ceil(sqrt(pow(rows, 2) * pow(cols, 2)));
 
-	for (int x = 0; x<rows; x++)
-		for (int y = 0; y<cols; y++)
-			if ((int)magnitudeThresh.at<uchar>(x, y) != 0)
+	for (int x = 0; x < rows; x++)
+		for (int y = 0; y < cols; y++)
+			if ((int)magnitudeThresh.at<uchar>(x, y) != 0) {
 				for (int theta = 0; theta < 360; theta++) {
-					float pos = direction.at<float>(x, y);
-					int ro = round(x * cos(theta*(M_PI/180))+ y * sin(theta*(M_PI/180)));
-					if (ro >= 0 && ro < 2*maxDim)
-						houghLines[ro + (2*maxDim*theta)] += 1;
+					int ro = round(x * sin(theta*(M_PI / 180)) + y * cos(theta*(M_PI / 180)));
+					if (ro >= 0 && ro < diagonal) {
+						houghLines[ro][theta] += 1;
+					}
 				}
+			}
 }
 
 void sobel(Mat &input, Mat &magnitudeThreshold, Mat &directionOut, int rank) {
@@ -279,7 +360,7 @@ void directionAtan(Mat &x, Mat &y, Mat &output) {
 			}
 		}
 	}
-	output = output;
+	output = output + M_PI/2;
 }
 
 void convolute(Mat &input, Mat &output, Mat &kernel) {
@@ -311,7 +392,7 @@ void convolute(Mat &input, Mat &output, Mat &kernel) {
 					int kernely = n + kernelRadiusY;
 
 					// get the values from the padded image and the kernel
-					int imageval = (int)paddedInput.at<uchar>(imagex, imagey);
+					float imageval = (float)paddedInput.at<uchar>(imagex, imagey);
 					float kernalval = kernel.at<float>(kernelx, kernely);
 
 					// do the multiplication
