@@ -82,18 +82,10 @@ int ***malloc3dArray(int dim1, int dim2, int dim3)
 /** @function main */
 int main(int argc, const char** argv)
 {
+	string name = "dart15";
 	// 1. Read Input Image
-	Mat frame = imread("dart15.jpg", CV_LOAD_IMAGE_COLOR);
-	Mat image = imread("lines.png", CV_LOAD_IMAGE_COLOR);
-	Mat magnitudeThreshold, direction;
-	sobel(image, magnitudeThreshold, direction, 1);
+	Mat frame = imread(name+".jpg", CV_LOAD_IMAGE_COLOR);
 	
-	/*int **houghLines = NULL;
-	int diagonal = ceil(sqrt(pow(magnitudeThreshold.rows, 2) + pow(magnitudeThreshold.cols, 2)));
-	houghLines = malloc2dArray(diagonal, 360);
-	houghLineDetect(magnitudeThreshold, direction, houghLines);
-	int count = plotHoughSpaceLines(image, houghLines, diagonal, magnitudeThreshold.cols, 100, 1, Point(0, 0));
-	std::cout << "Number of lines detected in image " << 1 << " is: " << count << std::endl;*/
 
 	// 2. Load the Strong Classifier in a structure called `Cascade'
 	if (!cascade.load(cascade_name)) { printf("--(!)Error loading\n"); return -1; };
@@ -102,7 +94,7 @@ int main(int argc, const char** argv)
 	detectAndDisplay(frame);
 
 	// 4. Save Result Image
-	imwrite("detected.jpg", image);
+	imwrite(name+"_detected.jpg", frame);
 
 	namedWindow("Display window", CV_WINDOW_AUTOSIZE);
 
@@ -136,7 +128,7 @@ void detectAndDisplay(Mat frame)
 	for (int i = 0; i < faces.size(); i++)
 	{
 		int x = faces[i].x, y = faces[i].y, width = faces[i].width, height = faces[i].height;
-		rectangle(frame, Point(x, y), Point(x + width, y + height), Scalar(0, 255, 0), 2);
+		
 		
 		std::cout << "Rect " << i << "has size: " << faces[i].width << "x" << faces[i].height  << std::endl;
 
@@ -162,8 +154,11 @@ void detectAndDisplay(Mat frame)
 		int diagonal = ceil(sqrt(pow(magnitudeThreshold.rows,2) + pow(magnitudeThreshold.cols,2)));
 		houghLines = malloc2dArray(diagonal,360);
 		houghLineDetect(magnitudeThreshold, direction, houghLines);
-		int count = plotHoughSpaceLines(frame, houghLines, diagonal, magnitudeThreshold.cols, 100, i, Point(x, y));
+		int count = plotHoughSpaceLines(frame, houghLines, diagonal, magnitudeThreshold.cols, 70, i, Point(x, y));
 		std::cout << "Number of lines detected in image " << i << " is: " << count << std::endl;
+
+		if(count>10)
+			rectangle(frame, Point(x, y), Point(x + width, y + height), Scalar(0, 255, 0), 2);
 	}
 
 }
@@ -196,44 +191,48 @@ int plotHoughSpaceLines(Mat &frame, int **houghLines, int diagonal, int length, 
 	Mat image;
 	image.create(Size(360, diagonal), CV_32F);
 	int count = 0;
-	for (int i = 5; i < 6; i++)
+	for (int i = 0; i < diagonal; i++)
 	{
-		for (int theta = 45; theta < 46; theta++)
+		for (int theta = 0; theta < 360; theta+=45)
 		{
-			int point = houghLines[i][theta];
-			int xStart, yStart, xEnd, yEnd;
-			image.at<float>(i, theta) = point;
-			//if (point > threshold) 
-			{
-				//image.at<float>(theta, i) = point;
-				if (theta%180 == 0) {
-					xStart = 0;
-					yStart = i;
-					xEnd = length;
-					yEnd = i;
+			for (int error = -5; error < 5; error++) {
+				if ((theta + error) >= 0 && (theta + error) < 360) {
+					int point = houghLines[i][(theta + error)];
+					int xStart, yStart, xEnd, yEnd;
+					image.at<float>(i, (theta + error)) = point;
+					if (point > threshold) {
+						//image.at<float>(theta, i) = point;
+						//if ((theta + error) % 180 == 0) {
+						//	yStart = 0;
+						//	xStart = round(i / cos((theta + error) * M_PI / 180));
+						//	yEnd = length;
+						//	xEnd = round(i / cos((theta + error) * M_PI / 180));
+
+						//}
+						//else if ((theta + error) % 90 == 0) {
+						//	xStart = 0;
+						//	yStart = round(i / sin((theta + error) * M_PI / 180));;
+						//	xEnd = length;
+						//	yEnd = round(i / sin((theta + error) * M_PI / 180));;
+						//}
+						//else {
+						//	xStart = 0;
+						//	yStart = round(i / sin((theta + error) * M_PI / 180));
+						//	xEnd = length;
+						//	yEnd = round((i - xEnd * cos((theta + error) * M_PI / 180)) / (sin((theta + error) * M_PI / 180)));
+						//}
+						////cout << "start: " << xStart << "," << yStart << "  end: " << xEnd << "," << yEnd << endl;
+						//arrowedLine(frame, Point(xStart + startPos.x, yStart + startPos.y), Point(xEnd + startPos.x, yEnd + startPos.y), Scalar(0, 0, 255), 1, 4, 0, 0.02);
+						count++;
+					}
 				}
-				else if (theta % 90 == 0) {
-					xStart = i;
-					yStart = 0;
-					xEnd = i;
-					yEnd = length;
-				}
-				else {
-					xStart = 0;
-					yStart = round(i / sin(theta * M_PI / 180));
-					xEnd = length; 
-					yEnd = round((i + xEnd * cos(theta * M_PI / 180)) / (sin(theta * M_PI / 180)));
-				}
-				//cout << "start: " << xStart << "," << yStart << "  end: " << xEnd << "," << yEnd << endl;
-				arrowedLine(frame, Point(xStart+startPos.x, yStart+startPos.y), Point(xEnd + startPos.x, yEnd + startPos.y), Scalar(0,0,255), 1, 4, 0, 0.02);
-				count++;
 			}
 		}
 	}
-	normaliseImage(image, image);
+	/*normaliseImage(image, image);
 	namedWindow("Hough Space Lines" + std::to_string(rank), CV_WINDOW_AUTOSIZE);
 
-	imshow("Hough Space Lines" + std::to_string(rank), image);
+	imshow("Hough Space Lines" + std::to_string(rank), image);*/
 	return count;
 }
 
@@ -282,7 +281,7 @@ void sobel(Mat &input, Mat &magnitudeThreshold, Mat &directionOut, int rank) {
 	cvtColor(input, inputGray, CV_BGR2GRAY);
 	//Gaussian Blur Image
 	Mat blurredIm;
-	GaussianBlur2(inputGray, 11, blurredIm);
+	GaussianBlur2(inputGray, 17, blurredIm);
 
 	//Derivative X
 	float xdata[] = { -1, 0, 1, -2, 0, 2, -1, 0, 1 };
@@ -304,9 +303,9 @@ void sobel(Mat &input, Mat &magnitudeThreshold, Mat &directionOut, int rank) {
 	Mat magnitude;
 	magnitudeImages(derX, derY, magnitude);
 	normaliseImage(magnitude, magnitude);
-	threshold(magnitude, magnitude, 80, 255, CV_THRESH_BINARY);
-	namedWindow("Magnitude"+ std::to_string(rank), CV_WINDOW_AUTOSIZE);
-	imshow("Magnitude"+std::to_string(rank), magnitude);
+	threshold(magnitude, magnitude, 120, 255, CV_THRESH_BINARY);
+	//namedWindow("Magnitude"+ std::to_string(rank), CV_WINDOW_AUTOSIZE);
+	//imshow("Magnitude"+std::to_string(rank), magnitude);
 	magnitudeThreshold.create(magnitude.size(), magnitude.type());
 	magnitudeThreshold = magnitude.clone();
 
