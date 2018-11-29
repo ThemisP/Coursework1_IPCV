@@ -32,7 +32,7 @@ void normaliseImage(Mat &image, Mat &output);
 void houghCircleDetect(Mat &magnitudeThresh, Mat &direction,int ***houghCircles);
 void houghLineDetect(Mat &magnitudeThresh, Mat &direction,int **houghLines);
 void plotHoughSpaceCircles(int ***houghCircles, int rows, int columns, int rank);
-int plotHoughSpaceLines(Mat &frame, int **houghLines,int diagonal,int threshold, int rank, Point startPos);
+int plotHoughSpaceLines(Mat &frame, int **houghLines,int diagonal, int length,int threshold, int rank, Point startPos);
 
 /** Global variables */
 String cascade_name = "cascade.xml";
@@ -88,25 +88,25 @@ int main(int argc, const char** argv)
 	Mat magnitudeThreshold, direction;
 	sobel(image, magnitudeThreshold, direction, 1);
 	
-	int **houghLines = NULL;
+	/*int **houghLines = NULL;
 	int diagonal = ceil(sqrt(pow(magnitudeThreshold.rows, 2) + pow(magnitudeThreshold.cols, 2)));
 	houghLines = malloc2dArray(diagonal, 360);
 	houghLineDetect(magnitudeThreshold, direction, houghLines);
-	int count = plotHoughSpaceLines(image, houghLines, diagonal, 100, 1, Point(0, 0));
-	std::cout << "Number of lines detected in image " << 1 << " is: " << count << std::endl;
+	int count = plotHoughSpaceLines(image, houghLines, diagonal, magnitudeThreshold.cols, 150, 1, Point(0, 0));
+	std::cout << "Number of lines detected in image " << 1 << " is: " << count << std::endl;*/
 
 	// 2. Load the Strong Classifier in a structure called `Cascade'
 	if (!cascade.load(cascade_name)) { printf("--(!)Error loading\n"); return -1; };
 
 	// 3. Detect Faces and Display Result
-	//detectAndDisplay(frame);
+	detectAndDisplay(frame);
 
 	// 4. Save Result Image
 	imwrite("detected.jpg", image);
 
 	namedWindow("Display window", CV_WINDOW_AUTOSIZE);
 
-	imshow("Display window", image);
+	imshow("Display window", frame);
 	waitKey(0);
 	
 	frame.release();
@@ -158,10 +158,10 @@ void detectAndDisplay(Mat frame)
 		plotHoughSpaceCircles(houghCircles, magnitudeThreshold.rows, magnitudeThreshold.cols, i);*/
 
 		int **houghLines = NULL;
-		int diagonal = ceil(sqrt(pow(magnitudeThreshold.rows,2) * pow(magnitudeThreshold.cols,2)));
+		int diagonal = ceil(sqrt(pow(magnitudeThreshold.rows,2) + pow(magnitudeThreshold.cols,2)));
 		houghLines = malloc2dArray(diagonal,360);
 		houghLineDetect(magnitudeThreshold, direction, houghLines);
-		int count = plotHoughSpaceLines(frame, houghLines, diagonal, 0, i, Point(xCheck, yCheck));
+		int count = plotHoughSpaceLines(frame, houghLines, diagonal, magnitudeThreshold.cols, 150, i, Point(xCheck, yCheck));
 		std::cout << "Number of lines detected in image " << i << " is: " << count << std::endl;
 	}
 
@@ -190,10 +190,10 @@ void plotHoughSpaceCircles(int ***houghCircles, int rows, int columns, int rank)
 	imshow("Hough Space Circles"+std::to_string(rank), image);
 }
 
-int plotHoughSpaceLines(Mat &frame, int **houghLines, int diagonal, int threshold,  int rank, Point startPos) {
+int plotHoughSpaceLines(Mat &frame, int **houghLines, int diagonal, int length, int threshold,  int rank, Point startPos) {
 	if (houghLines == NULL) return -1;
 	Mat image;
-	image.create(Size(diagonal, 360), CV_32F);
+	image.create(Size(360, diagonal), CV_32F);
 	int count = 0;
 	for (int i = 0; i < diagonal; i++)
 	{
@@ -201,28 +201,29 @@ int plotHoughSpaceLines(Mat &frame, int **houghLines, int diagonal, int threshol
 		{
 			float point = (float) houghLines[i][theta];
 			int xStart, yStart, xEnd, yEnd;
+			image.at<float>(i, theta) = point;
 			if (point > threshold) {
-				image.at<float>(i, theta) = point;
+				//image.at<float>(theta, i) = point;
 				if (theta%180 == 0) {
 					yStart = 0;
 					xStart = point;
-					yEnd = diagonal;
+					yEnd = length;
 					xEnd = point;
 				}
 				else if (theta % 90 == 0) {
 					yStart = point;
 					xStart = 0;
 					yEnd = point;
-					xEnd = diagonal;
+					xEnd = length;
 				}
 				else {
-					xStart = round(point / cos(theta * M_PI/180));
 					yStart = 0;
-					xEnd = 0; 
-					yEnd = round(point / sin(theta * M_PI/180));;
+					xStart = round(point / sin(theta * M_PI / 180));
+					yEnd = length; 
+					xEnd = round((point - yEnd * cos(theta * M_PI / 180)) / (sin(theta * M_PI / 180)));
 				}
-				cout << "start: " << xStart << "," << yStart << "  end: " << xEnd << "," << yEnd << endl;
-				line(frame, Point(xStart+startPos.x, yStart+startPos.y), Point(xEnd + startPos.x, yEnd + startPos.y), Scalar(0,0,255), 1, 4, 0);
+				//cout << "start: " << xStart << "," << yStart << "  end: " << xEnd << "," << yEnd << endl;
+				arrowedLine(frame, Point(xStart+startPos.x, yStart+startPos.y), Point(xEnd + startPos.x, yEnd + startPos.y), Scalar(0,0,255), 1, 4, 0, 0.02);
 				count++;
 			}
 		}
@@ -266,7 +267,7 @@ void houghLineDetect(Mat &magnitudeThresh, Mat &direction, int **houghLines) {
 		for (int y = 0; y < cols; y++)
 			if ((int)magnitudeThresh.at<uchar>(x, y) != 0) {
 				for (int theta = 0; theta < 360; theta++) {
-					int ro = round(x * sin(theta*(M_PI / 180)) + y * cos(theta*(M_PI / 180)));
+					int ro = round(x * cos(theta*(M_PI/180)) + y * sin(theta*(M_PI/180)));
 					if (ro >= 0 && ro < diagonal) {
 						houghLines[ro][theta] += 1;
 					}
@@ -301,7 +302,7 @@ void sobel(Mat &input, Mat &magnitudeThreshold, Mat &directionOut, int rank) {
 	Mat magnitude;
 	magnitudeImages(derX, derY, magnitude);
 	normaliseImage(magnitude, magnitude);
-	threshold(magnitude, magnitude, 70, 255, CV_THRESH_BINARY);
+	threshold(magnitude, magnitude, 80, 255, CV_THRESH_BINARY);
 	//namedWindow("Magnitude"+ std::to_string(rank), CV_WINDOW_AUTOSIZE);
 	//imshow("Magnitude"+std::to_string(rank), magnitude);
 	magnitudeThreshold.create(magnitude.size(), magnitude.type());
@@ -360,7 +361,7 @@ void directionAtan(Mat &x, Mat &y, Mat &output) {
 			}
 		}
 	}
-	output = output + M_PI/2;
+	output = output - M_PI/2;
 }
 
 void convolute(Mat &input, Mat &output, Mat &kernel) {
