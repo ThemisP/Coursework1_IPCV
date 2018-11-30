@@ -15,6 +15,7 @@
 #include "opencv2/imgproc/imgproc.hpp"
 #include <iostream>
 #include <stdio.h>
+#include <fstream>
 
 #define M_PI 3.1415926535897
 
@@ -22,7 +23,8 @@ using namespace std;
 using namespace cv;
 
 /** Function Headers */
-void detectAndDisplay(Mat frame);
+void readGroundTruth(Rect groundTruths[],string check, int &sizeOut);
+void detectAndDisplay(Mat frame, Rect *groundTruths, int groundTruthsSize);
 void sobel(Mat &input, Mat &magnitudeThreshold, Mat &directionOut, int rank);
 void convolute(Mat &input, Mat &output, Mat &kernel);
 void GaussianBlur2(cv::Mat &input, int size, cv::Mat &blurredOutput);
@@ -32,7 +34,7 @@ void normaliseImage(Mat &image, Mat &output);
 void houghCircleDetect(Mat &magnitudeThresh, Mat &direction,int ***houghCircles);
 void houghLineDetect(Mat &magnitudeThresh, Mat &direction,int **houghLines);
 void plotHoughSpaceCircles(int ***houghCircles, int rows, int columns, int rank);
-int plotHoughSpaceLines(Mat &frame, int **houghLines,int diagonal, int length,int threshold, int rank, Point startPos);
+int plotHoughSpaceLines(Mat &frame, int **houghLines,int diagonal, int length,int threshold, int rank, Point startPos, bool draw, bool plot);
 
 /** Global variables */
 String cascade_name = "cascade.xml";
@@ -85,13 +87,17 @@ int main(int argc, const char** argv)
 	string name = "dart15";
 	// 1. Read Input Image
 	Mat frame = imread(name+".jpg", CV_LOAD_IMAGE_COLOR);
+
+	Rect groundTruths[12];
+	int groundTruthsSize;
+	readGroundTruth(groundTruths, name, groundTruthsSize);
 	
 
 	// 2. Load the Strong Classifier in a structure called `Cascade'
 	if (!cascade.load(cascade_name)) { printf("--(!)Error loading\n"); return -1; };
 
 	// 3. Detect Faces and Display Result
-	detectAndDisplay(frame);
+	detectAndDisplay(frame, groundTruths, groundTruthsSize);
 
 	// 4. Save Result Image
 	imwrite(name+"_detected.jpg", frame);
@@ -108,8 +114,44 @@ int main(int argc, const char** argv)
 	return 0;
 }
 
+void readGroundTruth(Rect rectangles[], string check, int &sizeOut) {
+	std::ifstream file("groundTruth.csv");
+
+	int size = 0;
+
+	while (file.good()){
+		string name;
+		string temp;
+		int x, y, xEnd, yEnd;
+		getline(file, name, ',');
+
+		getline(file, temp, ',');
+		x = std::stoi(temp);
+
+		getline(file, temp, ',');
+		y = std::stoi(temp);
+
+		getline(file, temp, ',');
+		xEnd = std::stoi(temp);
+
+		getline(file, temp, file.widen('\n'));
+		yEnd = std::stoi(temp);
+
+		cout << name << ", " << x << ", " << y << ", " << xEnd << ", " << yEnd << ", " << endl;
+
+		if (name == check) {
+			Rect rectangle(Point(x, y), Point(xEnd, yEnd));
+			rectangles[size] = rectangle;
+			size ++;
+		}
+		
+
+	}
+	sizeOut = size;
+}
+
 /** @function detectAndDisplay */
-void detectAndDisplay(Mat frame)
+void detectAndDisplay(Mat frame, Rect *groundTruths, int groundTruthsSize)
 {
 	std::vector<Rect> faces;
 	Mat frame_gray;
@@ -123,6 +165,12 @@ void detectAndDisplay(Mat frame)
 
 	// 3. Print number of Faces found
 	std::cout << faces.size() << std::endl;
+	for (int i = 0; i < groundTruthsSize; i++) {
+		int x = groundTruths[i].x, y = groundTruths[i].y;
+		int xEnd = x + groundTruths[i].width, yEnd = y + groundTruths[i].height;
+		cout << x << ", " << y << ", " << xEnd << ", " << yEnd << ", " << endl;
+		rectangle(frame, Point(x,y),Point(xEnd,yEnd), Scalar(0, 0, 255), 2);
+	}
 
 	// 4. Draw box around faces found
 	for (int i = 0; i < faces.size(); i++)
@@ -154,7 +202,7 @@ void detectAndDisplay(Mat frame)
 		int diagonal = ceil(sqrt(pow(magnitudeThreshold.rows,2) + pow(magnitudeThreshold.cols,2)));
 		houghLines = malloc2dArray(diagonal,360);
 		houghLineDetect(magnitudeThreshold, direction, houghLines);
-		int count = plotHoughSpaceLines(frame, houghLines, diagonal, magnitudeThreshold.cols, 70, i, Point(x, y));
+		int count = plotHoughSpaceLines(frame, houghLines, diagonal, magnitudeThreshold.cols, 70, i, Point(x, y), false, false);
 		std::cout << "Number of lines detected in image " << i << " is: " << count << std::endl;
 
 		if(count>10)
@@ -186,53 +234,52 @@ void plotHoughSpaceCircles(int ***houghCircles, int rows, int columns, int rank)
 	imshow("Hough Space Circles"+std::to_string(rank), image);
 }
 
-int plotHoughSpaceLines(Mat &frame, int **houghLines, int diagonal, int length, int threshold,  int rank, Point startPos) {
+int plotHoughSpaceLines(Mat &frame, int **houghLines, int diagonal, int length, int threshold,  int rank, Point startPos, bool draw, bool plot) {
 	if (houghLines == NULL) return -1;
 	Mat image;
 	image.create(Size(360, diagonal), CV_32F);
 	int count = 0;
 	for (int i = 0; i < diagonal; i++)
 	{
-		for (int theta = 0; theta < 360; theta+=45)
+		for (int theta = 0; theta < 360; theta++)
 		{
-			for (int error = -5; error < 5; error++) {
-				if ((theta + error) >= 0 && (theta + error) < 360) {
-					int point = houghLines[i][(theta + error)];
-					int xStart, yStart, xEnd, yEnd;
-					image.at<float>(i, (theta + error)) = point;
-					if (point > threshold) {
-						//image.at<float>(theta, i) = point;
-						//if ((theta + error) % 180 == 0) {
-						//	yStart = 0;
-						//	xStart = round(i / cos((theta + error) * M_PI / 180));
-						//	yEnd = length;
-						//	xEnd = round(i / cos((theta + error) * M_PI / 180));
+			int point = houghLines[i][theta];
+			int xStart, yStart, xEnd, yEnd;
+			image.at<float>(i, theta) = point;
+			if (point > threshold) {
+				if (draw) {
+					if (theta % 180 == 0) {
+						yStart = 0;
+						xStart = round(i / cos(theta * M_PI / 180));
+						yEnd = length;
+						xEnd = round(i / cos(theta * M_PI / 180));
 
-						//}
-						//else if ((theta + error) % 90 == 0) {
-						//	xStart = 0;
-						//	yStart = round(i / sin((theta + error) * M_PI / 180));;
-						//	xEnd = length;
-						//	yEnd = round(i / sin((theta + error) * M_PI / 180));;
-						//}
-						//else {
-						//	xStart = 0;
-						//	yStart = round(i / sin((theta + error) * M_PI / 180));
-						//	xEnd = length;
-						//	yEnd = round((i - xEnd * cos((theta + error) * M_PI / 180)) / (sin((theta + error) * M_PI / 180)));
-						//}
-						////cout << "start: " << xStart << "," << yStart << "  end: " << xEnd << "," << yEnd << endl;
-						//arrowedLine(frame, Point(xStart + startPos.x, yStart + startPos.y), Point(xEnd + startPos.x, yEnd + startPos.y), Scalar(0, 0, 255), 1, 4, 0, 0.02);
-						count++;
 					}
+					else if (theta % 90 == 0) {
+						xStart = 0;
+						yStart = round(i / sin(theta * M_PI / 180));;
+						xEnd = length;
+						yEnd = round(i / sin(theta * M_PI / 180));;
+					}
+					else {
+						xStart = 0;
+						yStart = round(i / sin(theta * M_PI / 180));
+						xEnd = length;
+						yEnd = round((i - xEnd * cos(theta * M_PI / 180)) / (sin(theta * M_PI / 180)));
+					}
+					line(frame, Point(xStart + startPos.x, yStart + startPos.y), Point(xEnd + startPos.x, yEnd + startPos.y), Scalar(0, 0, 255), 1, 4, 0);
+
 				}
+				count++;
 			}
 		}
 	}
-	/*normaliseImage(image, image);
-	namedWindow("Hough Space Lines" + std::to_string(rank), CV_WINDOW_AUTOSIZE);
+	if (plot) {
+		normaliseImage(image, image);
+		namedWindow("Hough Space Lines" + std::to_string(rank), CV_WINDOW_AUTOSIZE);
 
-	imshow("Hough Space Lines" + std::to_string(rank), image);*/
+		imshow("Hough Space Lines" + std::to_string(rank), image);
+	}
 	return count;
 }
 
