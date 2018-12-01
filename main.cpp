@@ -84,13 +84,14 @@ int ***malloc3dArray(int dim1, int dim2, int dim3)
 /** @function main */
 int main(int argc, const char** argv)
 {
-	string name = "dart15";
+	string number = "15";
+	string item = "dart";
 	// 1. Read Input Image
-	Mat frame = imread(name+".jpg", CV_LOAD_IMAGE_COLOR);
+	Mat frame = imread("dart"+number+".jpg", CV_LOAD_IMAGE_COLOR);
 
 	Rect groundTruths[12];
 	int groundTruthsSize;
-	readGroundTruth(groundTruths, name, groundTruthsSize);
+	readGroundTruth(groundTruths, item+number, groundTruthsSize);
 	
 
 	// 2. Load the Strong Classifier in a structure called `Cascade'
@@ -100,7 +101,7 @@ int main(int argc, const char** argv)
 	detectAndDisplay(frame, groundTruths, groundTruthsSize);
 
 	// 4. Save Result Image
-	imwrite(name+"_detected.jpg", frame);
+	imwrite(item+number+"_detected.jpg", frame);
 
 	namedWindow("Display window", CV_WINDOW_AUTOSIZE);
 
@@ -137,7 +138,7 @@ void readGroundTruth(Rect rectangles[], string check, int &sizeOut) {
 		getline(file, temp, file.widen('\n'));
 		yEnd = std::stoi(temp);
 
-		cout << name << ", " << x << ", " << y << ", " << xEnd << ", " << yEnd << ", " << endl;
+		//cout << name << ", " << x << ", " << y << ", " << xEnd << ", " << yEnd << ", " << endl;
 
 		if (name == check) {
 			Rect rectangle(Point(x, y), Point(xEnd, yEnd));
@@ -163,13 +164,20 @@ void detectAndDisplay(Mat frame, Rect *groundTruths, int groundTruthsSize)
 	// 2. Perform Viola-Jones Object Detection 
 	cascade.detectMultiScale(frame_gray, faces, 1.1, 1, 0 | CV_HAAR_SCALE_IMAGE, Size(50, 50), Size(500, 500));
 
+	//Initialise rectangle array for finding best detection based on ground truth
+
+	Rect *truePositives = NULL;
+	truePositives = (Rect *)malloc(groundTruthsSize * sizeof(Rect));
+	float TP = 0, detection = 0; 
+
 	// 3. Print number of Faces found
 	std::cout << faces.size() << std::endl;
 	for (int i = 0; i < groundTruthsSize; i++) {
 		int x = groundTruths[i].x, y = groundTruths[i].y;
 		int xEnd = x + groundTruths[i].width, yEnd = y + groundTruths[i].height;
-		cout << x << ", " << y << ", " << xEnd << ", " << yEnd << ", " << endl;
+		//cout << x << ", " << y << ", " << xEnd << ", " << yEnd << ", " << endl;
 		rectangle(frame, Point(x,y),Point(xEnd,yEnd), Scalar(0, 0, 255), 2);
+		truePositives[i] = Rect(0,0,0,0);
 	}
 
 	// 4. Draw box around faces found
@@ -177,8 +185,7 @@ void detectAndDisplay(Mat frame, Rect *groundTruths, int groundTruthsSize)
 	{
 		int x = faces[i].x, y = faces[i].y, width = faces[i].width, height = faces[i].height;
 		
-		
-		std::cout << "Rect " << i << "has size: " << faces[i].width << "x" << faces[i].height  << std::endl;
+		std::cout << "Rect " << i << " points: " << x << ", " << y << " and " << x+width << ", " << y+height  << std::endl;
 
 		Mat magnitudeThreshold, direction;
 		int xCheck = x - 0.25*width, yCheck = y - 0.25*height, endXCheck = x+width + 0.25*width, endYCheck = y + height + 0.25*height;
@@ -187,10 +194,10 @@ void detectAndDisplay(Mat frame, Rect *groundTruths, int groundTruthsSize)
 		if (yCheck < 0) yCheck = 0;
 		if (endYCheck >= frame.rows) endYCheck = frame.rows-1;
 
-		std::cout << "Rect CHECK " << i << "has size: " << endXCheck -xCheck << "x" << endYCheck-yCheck << std::endl;
-		std::cout << "Rect CHECK " << i << "," << endXCheck << ","<< xCheck << "," << endYCheck << "," << yCheck << std::endl;
-		Rect roi(x, y, width, height);
-		Mat cropped(frame, roi);
+		//std::cout << "Rect CHECK " << i << "has size: " << endXCheck -xCheck << "x" << endYCheck-yCheck << std::endl;
+		//std::cout << "Rect CHECK " << i << "," << endXCheck << ","<< xCheck << "," << endYCheck << "," << yCheck << std::endl;
+		Rect currentRect(x, y, width, height);
+		Mat cropped(frame, currentRect);
 
 		sobel(cropped, magnitudeThreshold, direction, i);
 		/*int ***houghCircles = NULL;
@@ -203,11 +210,31 @@ void detectAndDisplay(Mat frame, Rect *groundTruths, int groundTruthsSize)
 		houghLines = malloc2dArray(diagonal,360);
 		houghLineDetect(magnitudeThreshold, direction, houghLines);
 		int count = plotHoughSpaceLines(frame, houghLines, diagonal, magnitudeThreshold.cols, 70, i, Point(x, y), false, false);
-		std::cout << "Number of lines detected in image " << i << " is: " << count << std::endl;
+		//std::cout << "Number of lines detected in image " << i << " is: " << count << std::endl;
 
-		if(count>10)
-			rectangle(frame, Point(x, y), Point(x + width, y + height), Scalar(0, 255, 0), 2);
+		if (count > 10) {
+			rectangle(frame, currentRect, Scalar(0, 255, 0), 2);
+			detection++;
+			for (int j = 0; j < groundTruthsSize; j++) {
+				cv::Rect recIntersection = groundTruths[j] & currentRect;
+				if (recIntersection.area() == currentRect.area()) {
+					if (truePositives[j].area() == 0) {
+						TP++;
+						truePositives[j] = currentRect;
+					}
+					else if (truePositives[j].area() < currentRect.area()) {
+						truePositives[j] = currentRect;
+					}
+				}
+			}
+		}
 	}
+
+	cout << "TP = " << (int)TP << ", TP+FN =  " << (int)detection << ", ground Truth " << groundTruthsSize << endl;
+	float precision = TP / detection;
+	float recall = TP / groundTruthsSize;
+	float F1score = 2 * (precision*recall) / (precision + recall);
+	cout << "F1 score: " << F1score << endl;
 
 }
 
@@ -396,7 +423,6 @@ void magnitudeImages(Mat &x, Mat &y, Mat &output) {
 		}
 	}
 }
-
 
 void directionAtan(Mat &x, Mat &y, Mat &output) {
 	output.create(x.size(), CV_32F);
