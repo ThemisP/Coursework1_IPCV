@@ -33,7 +33,7 @@ void directionAtan(Mat &x, Mat &y, Mat &output);
 void normaliseImage(Mat &image, Mat &output);
 void houghCircleDetect(Mat &magnitudeThresh, Mat &direction,int ***houghCircles);
 void houghLineDetect(Mat &magnitudeThresh, Mat &direction,int **houghLines);
-void plotHoughSpaceCircles(int ***houghCircles, int rows, int columns, int rank);
+int plotHoughSpaceCircles(Mat &frame,int ***houghCircles, int rows, int columns, int rank, int threshold, Point startPoint);
 int plotHoughSpaceLines(Mat &frame, int **houghLines,int diagonal, int length,int threshold, int rank, Point startPos, bool draw, bool plot);
 
 /** Global variables */
@@ -200,33 +200,43 @@ void detectAndDisplay(Mat frame, Rect *groundTruths, int groundTruthsSize)
 		Mat cropped(frame, currentRect);
 
 		sobel(cropped, magnitudeThreshold, direction, i);
-		/*int ***houghCircles = NULL;
-		houghCircles = malloc3dArray(magnitudeThreshold.rows, magnitudeThreshold.cols, 90);
-		houghCircleDetect(magnitudeThreshold, direction, houghCircles);
-		plotHoughSpaceCircles(houghCircles, magnitudeThreshold.rows, magnitudeThreshold.cols, i);*/
+		
 
 		int **houghLines = NULL;
 		int diagonal = ceil(sqrt(pow(magnitudeThreshold.rows,2) + pow(magnitudeThreshold.cols,2)));
 		houghLines = malloc2dArray(diagonal,360);
 		houghLineDetect(magnitudeThreshold, direction, houghLines);
-		int count = plotHoughSpaceLines(frame, houghLines, diagonal, magnitudeThreshold.cols, 70, i, Point(x, y), false, false);
+		int lineCount = plotHoughSpaceLines(frame, houghLines, diagonal, magnitudeThreshold.cols, 60, i, Point(x, y), false, false);
 		//std::cout << "Number of lines detected in image " << i << " is: " << count << std::endl;
 
-		if (count > 10) {
-			rectangle(frame, currentRect, Scalar(0, 255, 0), 2);
-			detection++;
-			for (int j = 0; j < groundTruthsSize; j++) {
-				cv::Rect recIntersection = groundTruths[j] & currentRect;
-				if (recIntersection.area() == currentRect.area()) {
-					if (truePositives[j].area() == 0) {
-						TP++;
-						truePositives[j] = currentRect;
-					}
-					else if (truePositives[j].area() < currentRect.area()) {
-						truePositives[j] = currentRect;
+		if (lineCount > 10) {
+			Rect currentRectExpanded(Point(xCheck,yCheck),Point(endXCheck, endYCheck));
+			Mat croppedExpanded(frame, currentRectExpanded);
+			Mat magnitudeThreshold2, direction2;
+			sobel(croppedExpanded, magnitudeThreshold2, direction2, i);
+			int ***houghCircles = NULL;
+
+			houghCircles = malloc3dArray(magnitudeThreshold2.rows, magnitudeThreshold2.cols, 90);
+			houghCircleDetect(magnitudeThreshold2, direction2, houghCircles);
+			int circleCount = plotHoughSpaceCircles(frame, houghCircles, magnitudeThreshold2.rows, magnitudeThreshold2.cols, i, 20, Point(xCheck, yCheck));
+
+			if (circleCount > 0) {
+				rectangle(frame, currentRect, Scalar(0, 255, 0), 2);
+				detection++;
+				for (int j = 0; j < groundTruthsSize; j++) {
+					cv::Rect recIntersection = groundTruths[j] & currentRect;
+					if (recIntersection.area() == currentRect.area()) {
+						if (truePositives[j].area() == 0) {
+							TP++;
+							truePositives[j] = currentRect;
+						}
+						else if (truePositives[j].area() < currentRect.area()) {
+							truePositives[j] = currentRect;
+						}
 					}
 				}
 			}
+			
 		}
 	}
 
@@ -238,11 +248,12 @@ void detectAndDisplay(Mat frame, Rect *groundTruths, int groundTruthsSize)
 
 }
 
-void plotHoughSpaceCircles(int ***houghCircles, int rows, int columns, int rank) {
-	if (houghCircles == NULL) return;
+int plotHoughSpaceCircles(Mat &frame, int ***houghCircles, int rows, int columns, int rank, int threshold, Point startPoint) {
+	if (houghCircles == NULL) return 0;
 	Mat image;
 	image.create(Size(columns, rows), CV_32F);
 	int radius = 90;
+	int count = 0;
 	for (int i = 0; i < rows; i++)
 	{
 		for (int j = 0; j < columns; j++)
@@ -251,14 +262,19 @@ void plotHoughSpaceCircles(int ***houghCircles, int rows, int columns, int rank)
 			for (int r = 0; r < radius; r++)
 			{
 				sum += houghCircles[i][j][r];
+				if (houghCircles[i][j][r] > threshold) {
+					//circle(frame, Point(i+startPoint.x, j+startPoint.y), r, Scalar(0, 0, 255), 1, 8, 0);
+					count++;
+				}
 			}
 			image.at<float>(i, j) = sum;
 		}
 	}
-	normaliseImage(image, image);
+	/*normaliseImage(image, image);
 	namedWindow("Hough Space Circles" + std::to_string(rank), CV_WINDOW_AUTOSIZE);
 
-	imshow("Hough Space Circles"+std::to_string(rank), image);
+	imshow("Hough Space Circles"+std::to_string(rank), image);*/
+	return count;
 }
 
 int plotHoughSpaceLines(Mat &frame, int **houghLines, int diagonal, int length, int threshold,  int rank, Point startPos, bool draw, bool plot) {
@@ -301,6 +317,7 @@ int plotHoughSpaceLines(Mat &frame, int **houghLines, int diagonal, int length, 
 			}
 		}
 	}
+	//imwrite(to_string(rank) + "dart_detected_houghSpace.jpg", image);
 	if (plot) {
 		normaliseImage(image, image);
 		namedWindow("Hough Space Lines" + std::to_string(rank), CV_WINDOW_AUTOSIZE);
@@ -380,6 +397,7 @@ void sobel(Mat &input, Mat &magnitudeThreshold, Mat &directionOut, int rank) {
 	threshold(magnitude, magnitude, 120, 255, CV_THRESH_BINARY);
 	//namedWindow("Magnitude"+ std::to_string(rank), CV_WINDOW_AUTOSIZE);
 	//imshow("Magnitude"+std::to_string(rank), magnitude);
+	//imwrite(to_string(rank)+"dart_detected_magnitude.jpg", magnitude);
 	magnitudeThreshold.create(magnitude.size(), magnitude.type());
 	magnitudeThreshold = magnitude.clone();
 
